@@ -1,0 +1,20 @@
+import numpy as np
+import pandas as pd
+
+def find_portfolio_statistics(df, allocs, total_cash, frequency_per_year, risk_free_return):
+
+	# Find cumulative value over time
+	df = (df/df.ix[0])
+	df = df * allocs
+	df = df * total_cash
+	df = df.sum(axis=1)
+
+	# Compute Portfolio Statistics
+	cumulative_return = (df.ix[-1]/df.ix[0]) - 1
+	print cumulative_return
+	dailyreturns = (df.ix[1:]/df.ix[:-1].values) - 1
+	average_daily_return = dailyreturns.mean(axis=0)
+	std_daily_return = dailyreturns.std(axis=0)
+	sharpe_ratio = (frequency_per_year**(1/2.0)) * ((average_daily_return-risk_free_return)/std_daily_return)
+
+	return cumulative_return, average_daily_return, std_daily_return, sharpe_ratio
