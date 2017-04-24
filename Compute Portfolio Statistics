@@ -1,7 +1,36 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import os
+from sys import exit
 
-def find_portfolio_statistics(df, allocs, total_cash, frequency_per_year, risk_free_return):
+def symbol_to_path(symbol, base_dir="/Users/maaanavkhaitan/pythonprograms/"):
+    """Return CSV file path given ticker symbol."""
+    return os.path.join(base_dir, "{}.csv".format(str(symbol)))
+
+def get_data(symbols, dates):
+    """Read stock data (adjusted close) for given symbols from CSV files."""
+    df = pd.DataFrame(index=dates)
+    if 'SPY' not in symbols:  # add SPY for reference, if absent
+        symbols.insert(0, 'SPY')
+
+    for symbol in symbols:
+        df_temp = pd.read_csv(symbol_to_path(symbol), index_col='Date',
+                parse_dates=True, usecols=['Date', 'Adj Close'], na_values=['nan'])
+        df_temp = df_temp.rename(columns={'Adj Close': symbol})
+        df = df.join(df_temp)
+        if symbol == 'SPY':  # drop dates SPY did not trade
+            df = df.dropna(subset=["SPY"])
+
+    return df
+
+def find_portfolio_statistics(sd, ed, symbols, allocs, total_cash, frequency_per_year, risk_free_return, gen_plot):
+
+	dates = pd.date_range(pd.to_datetime(sd), pd.to_datetime(ed))
+	df = get_data(symbols, dates)
+
+
+	dfcopy = df.copy()
 
 	# Find cumulative value over time
 	df = (df/df.ix[0])
@@ -11,10 +40,30 @@ def find_portfolio_statistics(df, allocs, total_cash, frequency_per_year, risk_f
 
 	# Compute Portfolio Statistics
 	cumulative_return = (df.ix[-1]/df.ix[0]) - 1
-	print cumulative_return
 	dailyreturns = (df.ix[1:]/df.ix[:-1].values) - 1
 	average_daily_return = dailyreturns.mean(axis=0)
 	std_daily_return = dailyreturns.std(axis=0)
 	sharpe_ratio = (frequency_per_year**(1/2.0)) * ((average_daily_return-risk_free_return)/std_daily_return)
+	ending_value = df.ix[-1]
+	total_returns = average_daily_return*(252/frequency_per_year)
+	print 'Cumulative Return: {}; Average Period Return: {}; Standard Deviation of Daily Returns: {}; Sharpe Ratio: {}; Ending Value: {}'.format(cumulative_return,total_returns,std_daily_return,sharpe_ratio,ending_value)
 
-	return cumulative_return, average_daily_return, std_daily_return, sharpe_ratio
+	if gen_plot == True:
+
+    	#Plot portfolio along SPY
+	    dfcopynormed = dfcopy['SPY']/dfcopy['SPY'].ix[0]
+	    ax = dfcopynormed.plot(title='Daily Portfolio Value and SPY', label='SPY')
+	    sumcopy = df
+	    normed = sumcopy/sumcopy.ix[0]
+	    normed.plot(label='Portfolio Value', ax=ax)
+	    ax.set_xlabel('Date')
+	    ax.set_ylabel('Price')
+	    ax.legend(loc=2)
+	    plt.show()
+
+
+find_portfolio_statistics('2016-04-26', '2017-03-18', ['AAPL','SPY','XOM','GLD'], [0.2,0.05,0.9,0.05], 1000000, 1, 0, True)
+
+sys.exit()
+
+
