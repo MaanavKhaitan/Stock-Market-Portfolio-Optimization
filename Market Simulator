@@ -1,0 +1,85 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
+import scipy.optimize as spo
+import datetime as dt
+
+def symbol_to_path(symbol, base_dir="/Users/maaanavkhaitan/pythonprograms/"):
+    """Return CSV file path given ticker symbol."""
+    return os.path.join(base_dir, "{}.csv".format(str(symbol)))
+
+
+def get_data(symbols, dates):
+    """Read stock data (adjusted close) for given symbols from CSV files."""
+    df = pd.DataFrame(index=dates)
+    if 'SPY' not in symbols:  # add SPY for reference, if absent
+        symbols.insert(0, 'SPY')
+
+    for symbol in symbols:
+        df_temp = pd.read_csv(symbol_to_path(symbol), index_col='Date',
+                parse_dates=True, usecols=['Date', 'Adj Close'], na_values=['nan'])
+        df_temp = df_temp.rename(columns={'Adj Close': symbol})
+        df = df.join(df_temp)
+        if symbol == 'SPY':  # drop dates SPY did not trade
+            df = df.dropna(subset=["SPY"])
+
+    return df
+
+def compute_portval(order_directory, capital):
+
+	#Set up the orders and prices dataframes
+	orders = pd.read_csv(order_directory, index_col='Date', parse_dates=True, na_values=['nan'])
+	sd = orders.index[0]
+	ed = orders.index[-1]
+	dates = pd.date_range(sd, ed)
+	symbols = list(orders['Symbol'].unique())
+	prices = get_data(symbols, dates)
+	prices['Cash'] = 1
+
+	#Set up the trades dataframe and check for leverage
+	trades = pd.DataFrame(0, index=dates, columns=prices.columns)
+	abs_sum = 0
+	total_sum = 0
+	total_cash = capital
+	for i in range(0, len(orders)):
+		if orders.ix[i,'Order'] == 'BUY':
+			abs_sum = abs_sum + abs(orders.ix[i,'Shares'])
+			total_sum = total_sum + orders.ix[i,'Shares']
+			total_cash = total_cash - (prices.ix[orders.index[i].date(),orders.ix[i,'Symbol']] * orders.ix[i,'Shares'])
+			if (abs_sum/(total_sum + total_cash)) < 1.5:
+				trades.ix[orders.index[i].date(), orders.ix[i,'Symbol']] = orders.ix[i,'Shares']
+				trades.ix[orders.index[i].date(), 'Cash'] = prices.ix[orders.index[i].date(),orders.ix[i,'Symbol']] * orders.ix[i,'Shares'] * -1
+		if orders.ix[i,'Order'] == 'SELL':
+			abs_sum = abs_sum + abs(orders.ix[i,'Shares'])
+			total_sum = total_sum - orders.ix[i,'Shares']
+			total_cash = total_cash + (prices.ix[orders.index[i].date(),orders.ix[i,'Symbol']] * orders.ix[i,'Shares'])
+			if (abs_sum/(total_sum + total_cash)) < 1.5:
+				trades.ix[orders.index[i].date(), orders.ix[i,'Symbol']] = orders.ix[i,'Shares'] * -1
+				trades.ix[orders.index[i].date(), 'Cash'] = prices.ix[orders.index[i].date(),orders.ix[i,'Symbol']] * orders.ix[i,'Shares']
+	
+	#Set up holdings dataframe
+	holdings = pd.DataFrame(0, index=dates, columns=prices.columns)
+	holdings.ix[0,'Cash'] = capital
+	holdings.ix[0] = holdings.ix[0] + trades.ix[0]
+	for i in range(1,len(holdings.index)):
+		holdings.ix[i] = holdings.ix[i-1] + trades.ix[i]
+	
+	#Set up values dataframe
+	values = pd.DataFrame(0, index=dates, columns=prices.columns)
+	values = prices * holdings
+	values = values.sum(axis=1)
+	return values
+
+
+
+
+
+	
+
+
+
+
+print compute_portval("/Users/maaanavkhaitan/pythonprograms/orders1.csv", 1000000)
+
+
